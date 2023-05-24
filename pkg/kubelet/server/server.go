@@ -769,51 +769,84 @@ func proxyStream(w http.ResponseWriter, r *http.Request, url *url.URL) {
 
 // getAttach handles requests to attach to a container.
 func (s *Server) getAttach(request *restful.Request, response *restful.Response) {
-	params := getExecRequestParams(request)
+	// params := getExecRequestParams(request)
 	streamOpts, err := remotecommandserver.NewOptions(request.Request)
 	if err != nil {
 		utilruntime.HandleError(err)
 		response.WriteError(http.StatusBadRequest, err)
 		return
 	}
+	url, err := s.getAttachUrl(request, response, streamOpts)
+	if err != nil {
+		klog.Errorf("failed to get backend url %v", err)
+		return
+	}
+	if url.Scheme == "ws" || url.Scheme == "wss" {
+		remotecommandserver.ProxyToWebSocket(response.ResponseWriter, request.Request, url, streamOpts)
+	} else {
+		proxyStream(response.ResponseWriter, request.Request, url)
+	}
+}
+
+func (s *Server) getAttachUrl(request *restful.Request, response *restful.Response, streamOpts *remotecommandserver.Options) (*url.URL, error) {
+	params := getExecRequestParams(request)
 	pod, ok := s.host.GetPodByName(params.podNamespace, params.podName)
 	if !ok {
 		response.WriteError(http.StatusNotFound, fmt.Errorf("pod does not exist"))
-		return
+		// return
+		return nil, fmt.Errorf("pod not found")
 	}
 
 	podFullName := kubecontainer.GetPodFullName(pod)
 	url, err := s.host.GetAttach(podFullName, params.podUID, params.containerName, *streamOpts)
 	if err != nil {
 		streaming.WriteError(err, response.ResponseWriter)
-		return
+		// return
+		return nil, err
 	}
 
-	proxyStream(response.ResponseWriter, request.Request, url)
+	// proxyStream(response.ResponseWriter, request.Request, url)
+	return url, nil
 }
 
 // getExec handles requests to run a command inside a container.
 func (s *Server) getExec(request *restful.Request, response *restful.Response) {
-	params := getExecRequestParams(request)
+	// params := getExecRequestParams(request)
 	streamOpts, err := remotecommandserver.NewOptions(request.Request)
 	if err != nil {
 		utilruntime.HandleError(err)
 		response.WriteError(http.StatusBadRequest, err)
 		return
 	}
+	url, err := s.getExecUrl(request, response, streamOpts)
+	if err != nil {
+		klog.Errorf("failed to get backend url %v", err)
+		return
+	}
+	if url.Scheme == "ws" || url.Scheme == "wss" {
+		remotecommandserver.ProxyToWebSocket(response.ResponseWriter, request.Request, url, streamOpts)
+	} else {
+		proxyStream(response.ResponseWriter, request.Request, url)
+	}
+}
+
+func (s *Server) getExecUrl(request *restful.Request, response *restful.Response, streamOpts *remotecommandserver.Options) (*url.URL, error) {
+	params := getExecRequestParams(request)
 	pod, ok := s.host.GetPodByName(params.podNamespace, params.podName)
 	if !ok {
 		response.WriteError(http.StatusNotFound, fmt.Errorf("pod does not exist"))
-		return
+		return nil, fmt.Errorf("pod not found")
 	}
 
 	podFullName := kubecontainer.GetPodFullName(pod)
 	url, err := s.host.GetExec(podFullName, params.podUID, params.containerName, params.cmd, *streamOpts)
 	if err != nil {
 		streaming.WriteError(err, response.ResponseWriter)
-		return
+		// return
+		return nil, err
 	}
-	proxyStream(response.ResponseWriter, request.Request, url)
+	// proxyStream(response.ResponseWriter, request.Request, url)
+	return url, nil
 }
 
 // getRun handles requests to run a command inside a container.
